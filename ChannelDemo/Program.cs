@@ -1,4 +1,4 @@
-﻿var queue = new BlockingCollection<Message>(new ConcurrentQueue<Message>());
+﻿var queue = Channel.CreateUnbounded<Message>();
 
 var sendThread1 = new Thread(SendMessageThread);
 var receiveThread1 = new Thread(ReceiveMessageThread);
@@ -21,8 +21,8 @@ void SendMessageThread(object? arg)
     
     for (int i = 1; i <= 20; i++)
     {
-        queue.Add(new Message(id, i.ToString()));
-        Console.WriteLine($"Thread {id} sent {i}");
+        if (queue.Writer.TryWrite(new Message(id, i.ToString())))
+            Console.WriteLine($"Thread {id} sent {i}");
         Thread.Sleep(100);
     }
 }
@@ -33,8 +33,8 @@ void ReceiveMessageThread(object? id)
     {
         while (true)
         {
-            var message = queue.Take();
-            Console.WriteLine($"Thread {id} received {message.Content} from {message.FromId}");
+            if (queue.Reader.TryRead(out var message))
+                Console.WriteLine($"Thread {id} received {message.Content} from {message.FromId}");
             Thread.Sleep(1);
         }
     }
