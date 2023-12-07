@@ -5,7 +5,6 @@ var receiver = ReceiveMessageThreadAsync(channel.Reader, 1);
 
 await sender;
 // make sure all messages are received
-await Task.Delay(100);
 channel.Writer.Complete();
 await receiver;
 
@@ -20,22 +19,14 @@ async Task SendMessageThreadAsync(ChannelWriter<Message> writer, int id)
         Console.WriteLine($"Thread {id} sent {i}");
         await Task.Delay(100);
     }
+    // we don't complete the writer here since there may be more than one senders
 }
 
 async Task ReceiveMessageThreadAsync(ChannelReader<Message> reader, int id)
 {
-    try
+    await foreach (var message in reader.ReadAllAsync())
     {
-        while (!reader.Completion.IsCompleted)
-        {
-            var message = await reader.ReadAsync();
-            Console.WriteLine($"Thread {id} received {message.Content} from {message.FromId}");
-        }
-    }
-    // this is needed since the while condition cannot detect the completion of the channel in time
-    catch (ChannelClosedException)
-    {
-        Console.WriteLine($"Thread {id} task stopped.");
+        Console.WriteLine($"Thread {id} received {message.Content}");
     }
 }
 
