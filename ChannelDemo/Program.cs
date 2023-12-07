@@ -1,14 +1,12 @@
 ﻿var channel = Channel.CreateUnbounded<Message>();
 
-using var cts = new CancellationTokenSource();
-
 var sender = SendMessageThreadAsync(channel.Writer, 1);
-var receiver = ReceiveMessageThreadAsync(channel.Reader, 1, cts.Token);
+var receiver = ReceiveMessageThreadAsync(channel.Reader, 1);
 
 await sender;
 // make sure all messages are received
 await Task.Delay(100);
-cts.Cancel();
+channel.Writer.Complete();
 await receiver;
 
 Console.WriteLine("Press any key to exit...");
@@ -24,19 +22,20 @@ async Task SendMessageThreadAsync(ChannelWriter<Message> writer, int id)
     }
 }
 
-async Task ReceiveMessageThreadAsync(ChannelReader<Message> reader, int id, CancellationToken token)
+async Task ReceiveMessageThreadAsync(ChannelReader<Message> reader, int id)
 {
     try
     {
-        while (!token.IsCancellationRequested)
+        while (!reader.Completion.IsCompleted)
         {
-            var message = await reader.ReadAsync(token);
+            var message = await reader.ReadAsync();
             Console.WriteLine($"Thread {id} received {message.Content} from {message.FromId}");
         }
     }
-    catch (OperationCanceledException)
+    // this is needed since the while condition cannot detect the completion of the channel in time
+    catch (ChannelClosedException)
     {
-        Console.WriteLine($"Thread {id} task canceled.");
+        Console.WriteLine($"Thread {id} task stopped.");
     }
 }
 
