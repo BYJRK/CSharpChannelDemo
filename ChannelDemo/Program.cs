@@ -1,46 +1,42 @@
-﻿var queue = Channel.CreateUnbounded<Message>();
+﻿var channel = Channel.CreateUnbounded<Message>();
 
-var sendThread1 = new Thread(SendMessageThread);
-var receiveThread1 = new Thread(ReceiveMessageThread);
+using var cts = new CancellationTokenSource();
 
-sendThread1.Start(1);
-receiveThread1.Start(1);
+var sender = SendMessageThreadAsync(channel.Writer, 1);
+var receiver = ReceiveMessageThreadAsync(channel.Reader, 1, cts.Token);
 
-sendThread1.Join();
+await sender;
 // make sure all messages are received
-Thread.Sleep(100);
-receiveThread1.Interrupt();
-receiveThread1.Join();
+await Task.Delay(100);
+cts.Cancel();
+await receiver;
 
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();
 
-void SendMessageThread(object? arg)
+async Task SendMessageThreadAsync(ChannelWriter<Message> writer, int id)
 {
-    int id = (int)arg!;
-    
     for (int i = 1; i <= 20; i++)
     {
-        if (queue.Writer.TryWrite(new Message(id, i.ToString())))
-            Console.WriteLine($"Thread {id} sent {i}");
-        Thread.Sleep(100);
+        await writer.WriteAsync(new Message(id, i.ToString()));
+        Console.WriteLine($"Thread {id} sent {i}");
+        await Task.Delay(100);
     }
 }
 
-void ReceiveMessageThread(object? id)
+async Task ReceiveMessageThreadAsync(ChannelReader<Message> reader, int id, CancellationToken token)
 {
     try
     {
-        while (true)
+        while (!token.IsCancellationRequested)
         {
-            if (queue.Reader.TryRead(out var message))
-                Console.WriteLine($"Thread {id} received {message.Content} from {message.FromId}");
-            Thread.Sleep(1);
+            var message = await reader.ReadAsync(token);
+            Console.WriteLine($"Thread {id} received {message.Content} from {message.FromId}");
         }
     }
-    catch (ThreadInterruptedException)
+    catch (OperationCanceledException)
     {
-        Console.WriteLine($"Thread {id} interrupted");
+        Console.WriteLine($"Thread {id} task canceled.");
     }
 }
 
